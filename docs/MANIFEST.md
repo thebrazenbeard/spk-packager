@@ -13,7 +13,7 @@ Required: `id`, `version`, `description`, `maintainer`, `arch`, and `os_min_ver`
 
 Optional: `display_name`, `os_max_ver`, `thirdparty`, `precheckstartstop`, and `ctl_stop`.
 
-Package versions are constrained to numeric components separated by `.`, `-`, or `_`.
+Package versions are constrained to numeric components separated by `.`, `-`, or `_`; each component must be at most `2^31-1`, matching Synology's documented field limit.
 
 ## service
 

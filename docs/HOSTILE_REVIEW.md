@@ -28,6 +28,10 @@
 >
 > **Resolution:** v0.1's generated service mode is explicitly a foreground-process-becomes-background-via-shell model. Daemons with different lifecycle semantics need a custom lifecycle script rather than pretending the generic PID contract applies.
 
+> **Challenge:** A stale PID file plus Linux PID reuse could cause a stop operation to signal an unrelated process.
+>
+> **Resolution:** Generated lifecycle scripts bind the PID to the process start-time value from `/proc/<pid>/stat`. Status and stop require both PID and start-time to match; a mismatch is treated as stale state and is cleaned without signalling the PID. Linux CI exercises this fail-safe path.
+
 > **Challenge:** Static lifecycle lint can reject valid shell such as `prestart|prestop|start|stop)`, or accept text that merely contains an action name in a comment.
 >
 > **Resolution:** v0.1 recognizes grouped shell-case labels instead of literal `prestart)` substrings, and Linux CI executes the generated lifecycle through the actual POSIX harness. This is still bounded validation, not a general shell parser; custom scripts remain subject to live DSM qualification.

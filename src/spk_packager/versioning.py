@@ -33,3 +33,9 @@ def validate_package_version(value: str) -> None:
         raise ValueError(
             f"invalid package version {value!r}; use numeric components separated by '.', '-' or '_'"
         )
+    maximum = (1 << 31) - 1
+    for component in re.split(r"[._-]", value):
+        if int(component) > maximum:
+            raise ValueError(
+                f"invalid package version {value!r}; each numeric component must be <= {maximum}"
+            )

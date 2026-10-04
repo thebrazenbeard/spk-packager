@@ -65,8 +65,8 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
     if manifest.assets.license_file is not None:
         if not manifest.assets.license_file.is_file():
             issues.append(Issue("error", "LICENSE_MISSING", f"license file not found: {manifest.assets.license_file}"))
-        elif manifest.assets.license_file.stat().st_size >= 1024 * 1024:
-            issues.append(Issue("error", "LICENSE_TOO_LARGE", "DSM package LICENSE must be smaller than 1 MiB"))
+        elif manifest.assets.license_file.stat().st_size >= 1_000_000:
+            issues.append(Issue("error", "LICENSE_TOO_LARGE", "DSM package LICENSE must be smaller than 1 MB"))
     if manifest.assets.wizard_dir is not None and not manifest.assets.wizard_dir.is_dir():
         issues.append(Issue("error", "WIZARD_DIR_MISSING", f"wizard directory not found: {manifest.assets.wizard_dir}"))
     if manifest.assets.resource_file is not None:

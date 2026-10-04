@@ -13,6 +13,8 @@ Synology's DSM 7.2.2 Developer Guide establishes:
 - package scripts receive DSM/package environment such as `SYNOPKG_PKGDEST`, `SYNOPKG_PKGVAR`, DSM version fields, arch, package status, and `SYNOPKG_TEMP_LOGFILE`;
 - `WIZARD_UIFILES` is available from DSM 7.2.2;
 - package signing is deprecated after DSM 7.0;
+- a package `LICENSE`, when present, must be smaller than 1 MB;
+- package version components are numeric and each is bounded to `0..2^31-1`;
 - `os_min_ver` uses `X.Y-BUILD`; this repository uses `7.2-72806` as the DS216/Tattler DSM 7.2.2 baseline.
 
 Official sources:

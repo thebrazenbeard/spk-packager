@@ -71,14 +71,30 @@ esac
 set -eu
 
 PIDFILE="${{SYNOPKG_PKGVAR}}/{service.pid_file}"
+STARTFILE="$PIDFILE.start"
 LOGFILE="${{SYNOPKG_PKGVAR}}/{service.log_file}"
 BIN="${{SYNOPKG_PKGDEST}}/{command}"
 
+proc_start_time() {{
+    pid="$1"
+    [ -r "/proc/$pid/stat" ] || return 1
+    line="$(cat "/proc/$pid/stat" 2>/dev/null)" || return 1
+    rest="${{line##*) }}"
+    set -- $rest
+    [ "$#" -ge 20 ] || return 1
+    printf '%s\\n' "$20"
+}}
+
 is_running() {{
     [ -f "$PIDFILE" ] || return 1
+    [ -f "$STARTFILE" ] || return 1
     pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    expected="$(cat "$STARTFILE" 2>/dev/null || true)"
     [ -n "$pid" ] || return 1
-    kill -0 "$pid" 2>/dev/null
+    [ -n "$expected" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    actual="$(proc_start_time "$pid" 2>/dev/null || true)"
+    [ -n "$actual" ] && [ "$actual" = "$expected" ]
 }}
 
 report_start_failure() {{
@@ -96,20 +112,20 @@ report_start_failure() {{
 
 stop_service() {{
     if ! is_running; then
-        rm -f "$PIDFILE"
+        rm -f "$PIDFILE" "$STARTFILE"
         return 0
     fi
     pid="$(cat "$PIDFILE")"
     kill -TERM "$pid" 2>/dev/null || true
     i=0
-    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt {service.stop_timeout_seconds} ]; do
+    while is_running && [ "$i" -lt {service.stop_timeout_seconds} ]; do
         sleep 1
         i=$((i + 1))
     done
-    if kill -0 "$pid" 2>/dev/null; then
+    if is_running; then
         kill -KILL "$pid" 2>/dev/null || true
     fi
-    rm -f "$PIDFILE"
+    rm -f "$PIDFILE" "$STARTFILE"
 }}
 
 case "${{1:-}}" in
@@ -131,16 +147,25 @@ case "${{1:-}}" in
         if is_running; then
             exit 0
         fi
-        rm -f "$PIDFILE"
+        rm -f "$PIDFILE" "$STARTFILE"
         umask 077
         mkdir -p "${{SYNOPKG_PKGVAR}}"
 {state_mkdir}        nohup "$BIN"{arg_suffix} >>"$LOGFILE" 2>&1 &
-        echo "$!" >"$PIDFILE"
+        pid="$!"
+        echo "$pid" >"$PIDFILE"
+        start_time="$(proc_start_time "$pid" 2>/dev/null || true)"
+        if [ -z "$start_time" ]; then
+            kill -TERM "$pid" 2>/dev/null || true
+            rm -f "$PIDFILE" "$STARTFILE"
+            report_start_failure
+            exit 1
+        fi
+        echo "$start_time" >"$STARTFILE"
         sleep {service.start_probe_seconds}
         if is_running; then
             exit 0
         fi
-        rm -f "$PIDFILE"
+        rm -f "$PIDFILE" "$STARTFILE"
         report_start_failure
         exit 1
         ;;

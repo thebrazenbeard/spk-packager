@@ -16,6 +16,7 @@ from spk_packager.lint import has_errors, lint_manifest
 from spk_packager.model import load_manifest
 from spk_packager.scaffold import scaffold
 from spk_packager.verify import verify_spk
+from spk_packager.versioning import validate_package_version
 
 
 class PackagerTests(unittest.TestCase):
@@ -65,6 +66,11 @@ class PackagerTests(unittest.TestCase):
         machines, warnings = expected_elf_machines(("armada38x",))
         self.assertEqual(machines, {40})
         self.assertEqual(warnings, [])
+
+    def test_package_version_component_ceiling(self) -> None:
+        validate_package_version("1.2.3-2147483647")
+        with self.assertRaises(ValueError):
+            validate_package_version("1.2.3-2147483648")
 
     def test_strict_profile_rejects_root_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,6 +187,18 @@ class LifecycleHarnessTests(unittest.TestCase):
             self.assertEqual(run("status").returncode, 0)
             self.assertEqual(run("stop").returncode, 0)
             self.assertEqual(run("status").returncode, 3)
+
+            # A PID file is not enough identity: if the recorded process start time
+            # no longer matches, stop must fail safe instead of signalling that PID.
+            self.assertEqual(run("start").returncode, 0)
+            pid_file = pkgvar / "example-service.pid"
+            start_file = Path(str(pid_file) + ".start")
+            pid = int(pid_file.read_text(encoding="utf-8").strip())
+            start_file.write_text("0\n", encoding="utf-8")
+            self.assertEqual(run("status").returncode, 1)
+            self.assertEqual(run("stop").returncode, 0)
+            os.kill(pid, 0)
+            os.kill(pid, 15)
 
 
 if __name__ == "__main__":
