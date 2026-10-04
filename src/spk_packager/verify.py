@@ -9,8 +9,9 @@ import tarfile
 
 from .arch import expected_elf_machines
 from .assets import png_dimensions
+from .elf import elf_machine
 from .info import parse_info
-from .lint import elf_machine
+from .lifecycle import handles_case_action
 from .profiles import get_profile
 from .versioning import DSMVersion, validate_package_version
 
@@ -106,13 +107,35 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
         if privilege is not None:
             try:
                 parsed = json.loads(privilege)
+                if not isinstance(parsed, dict):
+                    raise ValueError("root must be a JSON object")
                 run_as = parsed["defaults"]["run-as"]
                 if run_as not in {"package", "root"}:
                     raise ValueError("defaults.run-as must be package or root")
                 if run_as == "root":
-                    report.warnings.append("conf/privilege requests root execution")
+                    message = "conf/privilege requests root execution; DSM 7 strict packaging expects package-user execution"
+                    if strict:
+                        report.errors.append(message)
+                    else:
+                        report.warnings.append(message)
             except Exception as exc:
                 report.errors.append(f"conf/privilege is invalid: {exc}")
+
+        resource = read_outer("conf/resource")
+        if resource is not None:
+            try:
+                parsed_resource = json.loads(resource)
+                if not isinstance(parsed_resource, dict):
+                    raise ValueError("root must be a JSON object")
+            except Exception as exc:
+                report.errors.append(f"conf/resource is invalid: {exc}")
+
+        license_bytes = read_outer("LICENSE")
+        if license_bytes is not None and len(license_bytes) >= 1024 * 1024:
+            report.errors.append("LICENSE must be smaller than 1 MiB")
+
+        if any(name.startswith("WIZARD_UIFILES/") for name in outer_names) and not profile.wizard_uifiles_available:
+            report.errors.append(f"WIZARD_UIFILES is not available in profile {profile_id}")
 
         if strict:
             for name, dims in (("PACKAGE_ICON.PNG", (64, 64)), ("PACKAGE_ICON_256.PNG", (256, 256))):
@@ -127,15 +150,19 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
         script = read_outer("scripts/start-stop-status")
         if script is not None:
             text = script.decode("utf-8", errors="replace")
-            if "status)" not in text:
+            if not handles_case_action(text, "status"):
                 report.errors.append("start-stop-status does not handle status")
             if info.get("precheckstartstop", "yes") == "yes":
-                if "prestart)" not in text or "prestop)" not in text:
+                if not handles_case_action(text, "prestart") or not handles_case_action(text, "prestop"):
                     report.errors.append("precheckstartstop=yes but start-stop-status lacks prestart/prestop")
             if "exit 3" not in text:
                 report.warnings.append("start-stop-status does not visibly contain DSM status code 3 for a stopped service")
 
         if info:
+            necessary = ("package", "version", "os_min_ver", "description", "arch", "maintainer")
+            missing_fields = [key for key in necessary if not info.get(key)]
+            if missing_fields:
+                report.errors.append(f"INFO missing necessary fields: {missing_fields}")
             try:
                 validate_package_version(info.get("version", ""))
             except Exception as exc:
@@ -144,8 +171,12 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
                 min_os = DSMVersion.parse(info.get("os_min_ver", ""))
                 if min_os < profile.minimum_os:
                     report.errors.append(f"os_min_ver {min_os} is below profile minimum {profile.minimum_os}")
+                if info.get("os_max_ver"):
+                    max_os = DSMVersion.parse(info["os_max_ver"])
+                    if max_os < min_os:
+                        report.errors.append("INFO os_max_ver is lower than os_min_ver")
             except Exception as exc:
-                report.errors.append(f"INFO os_min_ver invalid: {exc}")
+                report.errors.append(f"INFO OS version range invalid: {exc}")
         package_bytes = read_outer("package.tgz")
 
     if package_bytes is None:

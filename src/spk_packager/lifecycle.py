@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import re
 import shlex
 
 from .model import Manifest
+
+
+def handles_case_action(text: str, action: str) -> bool:
+    return re.search(
+        rf"(?:^|[|\s]){re.escape(action)}(?:\||\))",
+        text,
+        flags=re.MULTILINE,
+    ) is not None
 
 NOOP_LIFECYCLE_NAMES = (
     "preinst",
