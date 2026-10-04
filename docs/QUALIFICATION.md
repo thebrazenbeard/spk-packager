@@ -47,3 +47,28 @@ Verification observed `INFO arch=armada38x` and payload ELF `e_machine=40`.
 This establishes `SOURCE_VALIDATED`, `SPK_STRUCTURALLY_VERIFIED`, and
 `SPK_REPRODUCIBLE` for that fixture. It does not establish `DSM_INSTALLED` or
 `DSM_RUNTIME_VERIFIED` for the SPK Packager-generated Tattler artifact.
+
+## 2026-10-04 public-repository hardening qualification
+
+Implementation subject: `eaf12a888b3d93f23dab23844a58ddc6e416c230`.
+
+Project Runner read back that exact GitHub branch head successfully. GitHub Actions
+CI run #14 passed on Python 3.11 and 3.13, including compile, unit tests, the real
+POSIX lifecycle harness, deterministic self-test, and generated-shell syntax.
+
+The expanded local suite passed 12 tests on Windows with only the POSIX-only lifecycle
+test deferred to Linux CI. The deterministic self-test produced SHA-256
+`48E6050319855D2C622137115ECE0514EFEEC6EBF10D63641D1284A09500C9F9`.
+
+The same current Tattler donor payload was packaged twice with the hardened packager.
+Both outputs were byte-identical at SHA-256
+`24B013783A680DB906DB3B8CD4DCE8F85D542DF43DF9E9784C5170992F955CEB`.
+The generated INFO contained `checksum=9e8377aa4d61fe1f1494e6a7ffb7c62a`,
+which matched the exact `package.tgz` MD5 on verification, and
+`extractsize=5185`. Architecture readback remained `armada38x` with payload ELF
+`e_machine=40`.
+
+This qualifies the new checksum/extractsize, USTAR/INFO-first, explicit noarch native
+bundle, and documented `privilege.tool` source/package mechanisms. It still does not
+establish Package Center installation or runtime behavior on a NAS for the newly
+generated artifact.
