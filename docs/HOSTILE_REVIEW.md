@@ -26,4 +26,8 @@
 
 > **Challenge:** A generic lifecycle wrapper can mishandle daemons that fork, double-fork, manage their own PID file, or exit after spawning children.
 >
-> **Resolution:** v0.1's generated service mode is explicitly a foreground-process-becomes-background-via-shell model. Daemons with different lifecycle semantics need a custom template/profile rather than pretending the generic PID contract applies.
+> **Resolution:** v0.1's generated service mode is explicitly a foreground-process-becomes-background-via-shell model. Daemons with different lifecycle semantics need a custom lifecycle script rather than pretending the generic PID contract applies.
+
+> **Challenge:** Static lifecycle lint can reject valid shell such as `prestart|prestop|start|stop)`, or accept text that merely contains an action name in a comment.
+>
+> **Resolution:** v0.1 recognizes grouped shell-case labels instead of literal `prestart)` substrings, and Linux CI executes the generated lifecycle through the actual POSIX harness. This is still bounded validation, not a general shell parser; custom scripts remain subject to live DSM qualification.
