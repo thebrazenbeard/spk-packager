@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .assets import write_placeholder_icon
+from .model import validate_package_id
 
 
 _MANIFEST = """[compatibility]
@@ -10,11 +12,11 @@ profile = "dsm-7.2.2+"
 strict = true
 
 [package]
-id = "{package_id}"
-display_name = "{display_name}"
+id = {package_id}
+display_name = {display_name}
 version = "0.1.0-0001"
 description = "Example service packaged with SPK Packager."
-maintainer = "{maintainer}"
+maintainer = {maintainer}
 arch = ["noarch"]
 os_min_ver = "7.2-72806"
 thirdparty = true
@@ -32,7 +34,7 @@ stop_timeout_seconds = 10
 
 [privilege]
 run_as = "package"
-username = "{package_id}"
+username = {package_id}
 
 [assets]
 icon64 = "assets/PACKAGE_ICON.PNG"
@@ -53,7 +55,20 @@ done
 """
 
 
+def _toml_string(value: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    if "\x00" in value:
+        raise ValueError(f"{field_name} may not contain NUL")
+    return json.dumps(value, ensure_ascii=False)
+
+
 def scaffold(path: Path, package_id: str, display_name: str, maintainer: str) -> Path:
+    validate_package_id(package_id)
+    encoded_package_id = _toml_string(package_id, "package_id")
+    encoded_display_name = _toml_string(display_name, "display_name")
+    encoded_maintainer = _toml_string(maintainer, "maintainer")
+
     path = path.resolve()
     if path.exists() and any(path.iterdir()):
         raise ValueError(f"target directory is not empty: {path}")
@@ -62,9 +77,9 @@ def scaffold(path: Path, package_id: str, display_name: str, maintainer: str) ->
     manifest = path / "spk-packager.toml"
     manifest.write_text(
         _MANIFEST.format(
-            package_id=package_id,
-            display_name=display_name,
-            maintainer=maintainer,
+            package_id=encoded_package_id,
+            display_name=encoded_display_name,
+            maintainer=encoded_maintainer,
         ),
         encoding="utf-8",
         newline="\n",

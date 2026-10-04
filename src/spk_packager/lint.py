@@ -22,6 +22,14 @@ class Issue:
         return {"severity": self.severity, "code": self.code, "message": self.message}
 
 
+def _is_within(path, root) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
 def lint_manifest(manifest: Manifest) -> list[Issue]:
     issues: list[Issue] = []
     profile = get_profile(manifest.profile_id)
@@ -42,6 +50,47 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
             "ROOT_PRIVILEGE_REQUESTED",
             "DSM 7 expects package-user execution; root packages require a separately justified/signed development path and are rejected by the strict profile",
         ))
+    root_overrides = [
+        f"ctrl-script:{item.action}"
+        for item in manifest.privilege.ctrl_scripts
+        if item.run_as == "root"
+    ]
+    root_overrides.extend(
+        f"executable:{item.relpath.as_posix()}"
+        for item in manifest.privilege.executables
+        if item.run_as == "root"
+    )
+    if root_overrides:
+        issues.append(Issue(
+            "error" if manifest.strict else "warning",
+            "ROOT_PRIVILEGE_OVERRIDE",
+            "strict packaging rejects per-action/file root overrides: "
+            + ", ".join(root_overrides),
+        ))
+
+    if not manifest.allow_external_sources:
+        local_inputs = [
+            ("assets.icon64", manifest.assets.icon64),
+            ("assets.icon256", manifest.assets.icon256),
+            ("assets.license", manifest.assets.license_file),
+            ("assets.wizard_dir", manifest.assets.wizard_dir),
+            ("assets.resource", manifest.assets.resource_file),
+        ]
+        local_inputs.extend(
+            (f"scripts.{name}", path)
+            for name, path in manifest.scripts.as_dict().items()
+        )
+        local_inputs.extend(
+            (f"payload.files[{index}].source", entry.source)
+            for index, entry in enumerate(manifest.payload_files)
+        )
+        for label, path in local_inputs:
+            if path is not None and not _is_within(path, manifest.root):
+                issues.append(Issue(
+                    "error" if manifest.strict else "warning",
+                    "EXTERNAL_SOURCE_PATH",
+                    f"{label} resolves outside the manifest directory: {path}",
+                ))
 
     if manifest.strict and profile.require_icons:
         for label, path, expected in (
@@ -67,8 +116,31 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
             issues.append(Issue("error", "LICENSE_MISSING", f"license file not found: {manifest.assets.license_file}"))
         elif manifest.assets.license_file.stat().st_size >= 1_000_000:
             issues.append(Issue("error", "LICENSE_TOO_LARGE", "DSM package LICENSE must be smaller than 1 MB"))
-    if manifest.assets.wizard_dir is not None and not manifest.assets.wizard_dir.is_dir():
-        issues.append(Issue("error", "WIZARD_DIR_MISSING", f"wizard directory not found: {manifest.assets.wizard_dir}"))
+    if manifest.assets.wizard_dir is not None:
+        if not manifest.assets.wizard_dir.is_dir():
+            issues.append(Issue(
+                "error",
+                "WIZARD_DIR_MISSING",
+                f"wizard directory not found: {manifest.assets.wizard_dir}",
+            ))
+        else:
+            for path in manifest.assets.wizard_dir.rglob("*"):
+                if path.is_symlink():
+                    issues.append(Issue(
+                        "error",
+                        "WIZARD_SYMLINK",
+                        f"wizard tree may not contain symlinks: {path}",
+                    ))
+                    continue
+                if path.is_file() and not _is_within(
+                    path.resolve(),
+                    manifest.assets.wizard_dir,
+                ):
+                    issues.append(Issue(
+                        "error",
+                        "WIZARD_PATH_ESCAPE",
+                        f"wizard file resolves outside wizard_dir: {path}",
+                    ))
     if manifest.assets.resource_file is not None:
         if not manifest.assets.resource_file.is_file():
             issues.append(Issue("error", "RESOURCE_MISSING", f"resource file not found: {manifest.assets.resource_file}"))
@@ -184,6 +256,23 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
                 f"noarch package explicitly bundles native ELF payloads: {native_machines}",
             ))
 
+    executable_paths: set[str] = set()
+    for item in manifest.privilege.executables:
+        relpath = item.relpath.as_posix()
+        if relpath in executable_paths:
+            issues.append(Issue(
+                "error",
+                "PRIVILEGE_EXECUTABLE_DUPLICATE",
+                f"duplicate privilege.executable relpath: {relpath}",
+            ))
+        executable_paths.add(relpath)
+        if relpath not in destinations:
+            issues.append(Issue(
+                "error",
+                "PRIVILEGE_EXECUTABLE_TARGET_MISSING",
+                f"privilege.executable target is not in payload: {relpath}",
+            ))
+
     tool_paths: set[str] = set()
     for item in manifest.privilege.tools:
         relpath = item.relpath.as_posix()
@@ -204,6 +293,18 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
                 "privilege.tool capabilities require DSM 7.0-40656 or newer",
             ))
 
+    if (
+        native_machines
+        and arch_warnings
+        and manifest.strict
+        and "noarch" not in manifest.package.arch
+    ):
+        issues.append(Issue(
+            "error",
+            "NATIVE_ARCH_UNVERIFIED",
+            "native ELF payload is present but one or more package.arch values "
+            "have no known ELF-machine mapping",
+        ))
     if native_machines and len({machine for _, machine in native_machines}) > 1:
         issues.append(Issue(
             "warning", "MIXED_ELF_MACHINES",

@@ -46,4 +46,16 @@
 
 > **Challenge:** A privilege helper feature can quietly recreate root-equivalent packaging.
 >
-> **Resolution:** `[[privilege.tool]]` follows the documented DSM schema: the target must exist in the payload, user/group remain `package`, permissions are constrained, and Linux capabilities are explicit. Whole-package root remains rejected by the strict profile.
+> **Resolution:** The manifest models Synology's documented `ctrl-script`, `executable`, and `tool` privilege entries and the builder must serialize all three; regression tests fail if any declared entry is silently dropped. Payload-targeted entries must resolve to packaged files. Strict mode rejects whole-package and per-entry root escalation; compatibility mode surfaces it as a warning.
+
+> **Challenge:** A manifest-controlled path can be syntactically safe as an archive name and still execute shell syntax when interpolated into a generated lifecycle script.
+>
+> **Resolution:** Generated runtime paths are shell-quoted as literals after the DSM root variable. Linux CI includes a path containing command substitution syntax and proves that start/status/stop never create the sentinel file.
+
+> **Challenge:** A live PID plus a missing or mismatched start-time receipt could make `start` launch a second service instance.
+>
+> **Resolution:** Generated `start` now refuses to launch while the PID file still names any live process unless the recorded `/proc/<pid>/stat` start-time identity matches. It fails closed rather than deleting the evidence and spawning a duplicate.
+
+> **Challenge:** A green builder test does not prove the standalone verifier catches malformed third-party SPKs.
+>
+> **Resolution:** Regression fixtures mutate INFO `extractsize`, lifecycle executable bits, gzip metadata, INFO escaping, archive path forms, and architecture metadata. Strict verification rejects those defects while `--compat-only` relaxes only reproducibility-oriented differences needed to inspect otherwise safe external packages.

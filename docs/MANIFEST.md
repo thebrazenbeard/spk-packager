@@ -5,7 +5,8 @@ SPK Packager reads `spk-packager.toml`.
 ## compatibility
 
 - `profile`: currently `dsm-7.2.2+`.
-- `strict`: when true, documented Package Center icons are required and dimensions are checked.
+- `strict`: enables the source/package hardening contract, including icon, archive reproducibility, architecture, and root-escalation checks.
+- `allow_external_sources`: defaults to `false`; set it only when build inputs intentionally resolve outside the manifest directory.
 
 ## package
 
@@ -29,7 +30,9 @@ The generic service contract assumes the launched command remains the process re
 
 `run_as = "package"` is the default. The strict DSM 7.2.2+ profile rejects `run_as = "root"`; `strict=false` downgrades that to a warning for explicitly managed privileged-development cases. `username` and `groupname` are optional.
 
-Zero or more `[[privilege.tool]]` entries may target payload files with `relpath`, `user = "package"`, `group = "package"`, four-digit octal `permission`, and optional comma-separated Linux `capabilities` such as `cap_net_raw`. Capability assignment requires DSM 7.0-40656 or newer. Tool paths must exist in the payload.
+Zero or more `[[privilege.ctrl_script]]` entries may select a documented package lifecycle `action` and `run_as = "package" | "root"`. Zero or more `[[privilege.executable]]` entries may set `relpath` and `run_as` for a payload executable. These manifest forms serialize to Synology's `ctrl-script` / `run-as` and `executable` JSON keys. Strict mode rejects per-entry root overrides; compatibility mode reports them as warnings.
+
+Zero or more `[[privilege.tool]]` entries may target payload files with `relpath`, `user = "package"`, `group = "package"`, four-digit octal `permission`, and optional comma-separated Linux `capabilities` such as `cap_net_raw`. Capability assignment requires DSM 7.0-40656 or newer. `executable` and `tool` paths must exist in the payload.
 
 ## assets
 
@@ -55,11 +58,11 @@ Paths are relative to the manifest. When `precheckstartstop=true`, a custom `sta
 
 Each `[[payload.files]]` contains `source`, `destination`, `mode`, and optional `expected_elf_machine`.
 
-Duplicate destinations, file-vs-parent path collisions, and path traversal are rejected.
+Duplicate destinations, file-vs-parent path collisions, non-canonical archive paths, and path traversal are rejected. Source files, scripts, and assets are confined to the manifest tree unless `allow_external_sources=true` is explicitly selected.
 
 ## generated INFO integrity fields
 
-SPK Packager owns and emits `checksum` as the lowercase MD5 of the exact generated `package.tgz`, and `extractsize` as the payload's uncompressed byte count rounded up to KiB. Strict verification recomputes the MD5 and rejects a mismatch.
+SPK Packager owns and emits `checksum` as the lowercase MD5 of the exact generated `package.tgz`. It emits `extractsize` using a deterministic conservative 4 KiB allocation estimate for files, implied directories, and the payload root rather than host-filesystem `du` output. Strict verification recomputes the MD5 and rejects an `extractsize` smaller than the raw payload byte lower bound.
 
 ## info.extra
 

@@ -17,10 +17,11 @@ SPK Packager uses ELF `e_machine` only as a coarse sanity check:
 
 - x86_64 -> 62;
 - i686 -> 3;
-- ARMv5/ARMv7 -> 40;
-- AArch64/armv8 -> 183.
+- ARMv5/ARMv7/ARMv7L -> 40;
+- AArch64/armv8 -> 183;
+- PowerPC/QorIQ -> 20.
 
-Synology platform strings are mapped where the DSM 7.2.2 guide or the pinned SynoCommunity architecture reference supports a family. Current coarse mappings include x86_64 -> 62, evansport/i686 -> 3, ARMv5/ARMv7 platform families -> 40, and ARMv8/AArch64 -> 183. `armada38x -> 40` is additionally cross-checked against the DS216/Tattler donor.
+Synology platform strings are mapped where the DSM 7.2.2 guide or the pinned SynoCommunity architecture reference supports a family. The table covers current/legacy x64, evansport/i686, DSM ARMv5/ARMv7/ARMv7L, AArch64/ARMv8, and PowerPC/QorIQ families. `armada38x -> 40` is additionally cross-checked against the DS216/Tattler donor. Unknown architecture strings remain warnings for script/data-only payloads but become strict errors when native ELF is present because the machine-class check cannot then establish compatibility.
 
 This is not enough to prove libc version, kernel ABI, instruction-set extensions, dynamic loader, or external library compatibility.
 
@@ -28,7 +29,7 @@ A `noarch` package normally may not contain native ELF payloads. The explicit `a
 
 ## Archive and INFO compatibility hardening
 
-The strict profile emits and verifies Synology's documented `checksum=MD5(package.tgz)` field, emits `extractsize`, writes deterministic USTAR archives with `INFO` first, and rejects PAX/`./` archive artifacts. These rules are compatible with the 7.2.2 baseline and are additionally corroborated by current public packagers and later DSM real-hardware reports.
+The strict profile emits and verifies Synology's documented `checksum=MD5(package.tgz)` field, emits a deterministic conservative `extractsize`, writes deterministic USTAR archives with `INFO` first, and rejects PAX/`./` archive artifacts. Standalone verification also checks lifecycle script executability, gzip timestamp/metadata fields, INFO semantics, payload lower-bound size, privilege targets, and native architecture mappings. `--compat-only` relaxes reproducibility-only constraints for inspecting third-party packages without silently weakening path traversal, checksum, or semantic safety checks.
 
 ## Toolchain boundary
 

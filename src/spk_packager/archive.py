@@ -14,11 +14,26 @@ class ArchiveFile:
     mode: int = 0o644
 
 
-def _safe_name(name: str) -> str:
-    path = PurePosixPath(name)
-    if path.is_absolute() or not path.parts or ".." in path.parts:
+def validate_archive_name(name: str) -> str:
+    if not name or "\\" in name:
         raise ValueError(f"unsafe archive path: {name!r}")
-    return path.as_posix()
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        raise ValueError(f"archive path contains control characters: {name!r}")
+    path = PurePosixPath(name)
+    canonical = path.as_posix()
+    if (
+        path.is_absolute()
+        or not path.parts
+        or ".." in path.parts
+        or canonical in {"", "."}
+        or canonical != name
+    ):
+        raise ValueError(f"unsafe or non-canonical archive path: {name!r}")
+    return canonical
+
+
+def _safe_name(name: str) -> str:
+    return validate_archive_name(name)
 
 
 def _info(item: ArchiveFile) -> tarfile.TarInfo:

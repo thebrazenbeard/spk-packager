@@ -30,19 +30,23 @@ def noop_script() -> bytes:
 def _runtime_arg(value: str) -> str:
     if "{pkgdest}" not in value and "{pkgvar}" not in value:
         return shlex.quote(value)
-    pkgdest = "__SPK_PKGDEST__"
-    pkgvar = "__SPK_PKGVAR__"
-    work = value.replace("{pkgdest}", pkgdest).replace("{pkgvar}", pkgvar)
-    work = (
-        work.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace(chr(96), "\\" + chr(96))
-        .replace("$", "\\$")
-    )
-    work = work.replace(pkgdest, "${SYNOPKG_PKGDEST}").replace(
-        pkgvar, "${SYNOPKG_PKGVAR}"
-    )
-    return f'"{work}"'
+
+    parts = re.split(r"(\{pkgdest\}|\{pkgvar\})", value)
+    rendered: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if part == "{pkgdest}":
+            rendered.append('\"${SYNOPKG_PKGDEST}\"')
+        elif part == "{pkgvar}":
+            rendered.append('\"${SYNOPKG_PKGVAR}\"')
+        else:
+            rendered.append(shlex.quote(part))
+    return "".join(rendered) or "''"
+
+
+def _runtime_path(root_var: str, relative: str) -> str:
+    return f'"${{{root_var}}}/"' + shlex.quote(relative)
 
 
 def render_start_stop_status(manifest: Manifest) -> bytes:
@@ -61,7 +65,7 @@ esac
     args = " ".join(_runtime_arg(arg) for arg in service.args)
     arg_suffix = f" {args}" if args else ""
     state_mkdir = "\n".join(
-        f'        mkdir -p "${{SYNOPKG_PKGVAR}}/{item}"'
+        f"        mkdir -p {_runtime_path('SYNOPKG_PKGVAR', item)}"
         for item in service.state_dirs
     )
     if state_mkdir:
@@ -70,10 +74,10 @@ esac
     script = f"""#!/bin/sh
 set -eu
 
-PIDFILE="${{SYNOPKG_PKGVAR}}/{service.pid_file}"
+PIDFILE={_runtime_path("SYNOPKG_PKGVAR", service.pid_file)}
 STARTFILE="$PIDFILE.start"
-LOGFILE="${{SYNOPKG_PKGVAR}}/{service.log_file}"
-BIN="${{SYNOPKG_PKGDEST}}/{command}"
+LOGFILE={_runtime_path("SYNOPKG_PKGVAR", service.log_file)}
+BIN={_runtime_path("SYNOPKG_PKGDEST", command)}
 
 proc_start_time() {{
     pid="$1"
@@ -85,14 +89,21 @@ proc_start_time() {{
     printf '%s\\n' "${{20}}"
 }}
 
-is_running() {{
+pidfile_process_exists() {{
     [ -f "$PIDFILE" ] || return 1
+    pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    kill -0 "$pid" 2>/dev/null
+}}
+
+is_running() {{
     [ -f "$STARTFILE" ] || return 1
+    pidfile_process_exists || return 1
     pid="$(cat "$PIDFILE" 2>/dev/null || true)"
     expected="$(cat "$STARTFILE" 2>/dev/null || true)"
-    [ -n "$pid" ] || return 1
     [ -n "$expected" ] || return 1
-    kill -0 "$pid" 2>/dev/null || return 1
     actual="$(proc_start_time "$pid" 2>/dev/null || true)"
     [ -n "$actual" ] && [ "$actual" = "$expected" ]
 }}
@@ -146,6 +157,12 @@ case "${{1:-}}" in
     start)
         if is_running; then
             exit 0
+        fi
+        if pidfile_process_exists; then
+            if [ -n "${{SYNOPKG_TEMP_LOGFILE:-}}" ]; then
+                echo "Refusing to start: PID file names a live process but its start-time identity is missing or does not match." >"$SYNOPKG_TEMP_LOGFILE"
+            fi
+            exit 1
         fi
         rm -f "$PIDFILE" "$STARTFILE"
         umask 077

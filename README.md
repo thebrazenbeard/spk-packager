@@ -9,15 +9,15 @@ It was extracted from the Tattler DS216 packaging work while investigating a rea
 - scaffolds a buildable DSM 7.2.2 package project;
 - generates deterministic `INFO`, `conf/privilege`, lifecycle scripts, icons, and `package.tgz`;
 - packs byte-reproducible `.spk` archives;
-- validates DSM 7 privilege and lifecycle requirements;
-- catches `precheckstartstop` / `prestart` / `prestop` mismatches;
+- validates DSM 7 privilege and lifecycle requirements, including documented `ctrl-script`, `executable`, and `tool` privilege entries;
+- catches `precheckstartstop` / `prestart` / `prestop` mismatches and stale/mismatched PID identity before launching duplicates;
 - uses DSM status code `3` for a cleanly stopped service;
-- checks archive traversal, duplicates, ordering, uid/gid/mtime normalization, icon dimensions, and payload layout;
+- checks canonical/path-confined build inputs, archive traversal, duplicates, ordering, uid/gid/mtime normalization, icon dimensions, and payload layout;
 - emits documented `checksum=MD5(package.tgz)` and `extractsize` INFO fields and verifies the checksum on readback;
 - writes plain deterministic USTAR archives with `INFO` first and rejects `./`-prefixed/PAX metadata;
 - performs ELF machine-class sanity checks against known Synology architecture/platform families;
 - rejects `arch=noarch` with native ELF payloads by default, while allowing an explicit multi-architecture bundle behind a portable dispatcher;
-- supports DSM `conf/privilege.tool` file permissions/capabilities without elevating the whole package;
+- supports DSM `conf/privilege` defaults, per-lifecycle `ctrl-script`, per-file `executable`, and `tool` permissions/capabilities, while strict mode rejects root escalation;
 - explains the compatibility profile and the sources from which its rules were derived.
 
 It intentionally does **not** replace Synology's compiler toolchains. Compile your Go/Rust/C/C++/other native application with the appropriate target toolchain, then let SPK Packager build and verify the DSM package around the resulting payload.

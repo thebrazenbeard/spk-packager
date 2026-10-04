@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .archive import ArchiveFile, deterministic_tar, deterministic_tgz
 from .info import render_info
@@ -26,6 +26,22 @@ def _privilege_bytes(manifest: Manifest) -> bytes:
         payload["username"] = manifest.privilege.username
     if manifest.privilege.groupname:
         payload["groupname"] = manifest.privilege.groupname
+    if manifest.privilege.ctrl_scripts:
+        payload["ctrl-script"] = [
+            {
+                "action": item.action,
+                "run-as": item.run_as,
+            }
+            for item in manifest.privilege.ctrl_scripts
+        ]
+    if manifest.privilege.executables:
+        payload["executable"] = [
+            {
+                "relpath": item.relpath.as_posix(),
+                "run-as": item.run_as,
+            }
+            for item in manifest.privilege.executables
+        ]
     if manifest.privilege.tools:
         tools: list[dict[str, str]] = []
         for item in manifest.privilege.tools:
@@ -40,6 +56,26 @@ def _privilege_bytes(manifest: Manifest) -> bytes:
             tools.append(tool)
         payload["tool"] = tools
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _estimated_extractsize_kb(payload: list[ArchiveFile]) -> int:
+    # Synology documents extractsize as a minimum free-space hint. Real packers
+    # commonly use du -sk on a staged tree, but host filesystem allocation would
+    # make otherwise-identical builds non-reproducible. Use a conservative,
+    # deterministic 4 KiB allocation estimate instead: one block for the target
+    # root, one or more blocks per file, and one block per implied directory.
+    directories: set[str] = set()
+    total_kb = 4
+    for item in payload:
+        path = PurePosixPath(item.name)
+        parent = path.parent
+        while parent != PurePosixPath("."):
+            directories.add(parent.as_posix())
+            parent = parent.parent
+        file_kb = max(4, ((len(item.data) + 4095) // 4096) * 4)
+        total_kb += file_kb
+    total_kb += 4 * len(directories)
+    return total_kb
 
 
 def _wizard_members(root: Path) -> list[ArchiveFile]:
@@ -70,8 +106,7 @@ def build_spk(manifest: Manifest, output: Path) -> BuildResult:
     ]
     package_tgz = deterministic_tgz(payload)
     package_checksum = hashlib.md5(package_tgz, usedforsecurity=False).hexdigest()
-    payload_bytes = sum(len(item.data) for item in payload)
-    extractsize_kb = (payload_bytes + 1023) // 1024
+    extractsize_kb = _estimated_extractsize_kb(payload)
 
     start_stop = (
         manifest.scripts.start_stop_status.read_bytes()
