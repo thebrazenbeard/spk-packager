@@ -82,7 +82,7 @@ proc_start_time() {{
     rest="${{line##*) }}"
     set -- $rest
     [ "$#" -ge 20 ] || return 1
-    printf '%s\\n' "$20"
+    printf '%s\\n' "${{20}}"
 }}
 
 is_running() {{

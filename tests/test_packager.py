@@ -47,6 +47,8 @@ class PackagerTests(unittest.TestCase):
             self.assertIn("status)", text)
             self.assertIn("exit 3", text)
             self.assertIn("SYNOPKG_TEMP_LOGFILE", text)
+            self.assertIn('"${20}"', text)
+            self.assertNotIn('"$20"', text)
             self.assertNotIn(r"\${SYNOPKG_PKGVAR}", text)
 
     def test_noarch_rejects_native_elf(self) -> None:
