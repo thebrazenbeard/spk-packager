@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: python -m pip install .
+      - name: Compile
+        run: python -m compileall -q src tests
+      - name: Unit and lifecycle tests
+        run: python -m unittest discover -s tests -v
+      - name: Deterministic self-test
+        run: python -m spk_packager.cli selftest
+      - name: Generated shell syntax
+        run: |
+          tmp="$(mktemp -d)"
+          python -m spk_packager.cli init "$tmp/demo" --package-id CIDemo --maintainer ci
+          python -m spk_packager.cli lint "$tmp/demo/spk-packager.toml"
+          python -m spk_packager.cli build "$tmp/demo/spk-packager.toml" --output "$tmp/demo.spk"
+          python -m spk_packager.cli verify "$tmp/demo.spk"
+          tar -xOf "$tmp/demo.spk" scripts/start-stop-status | sh -n

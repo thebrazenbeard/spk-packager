@@ -1,0 +1,43 @@
+[compatibility]
+profile = "dsm-7.2.2+"
+strict = true
+
+[package]
+id = "Tattler"
+display_name = "Tattler"
+version = "0.1.0-0002"
+description = "Low-overhead host diagnostics and passive connection observability for Synology DSM."
+maintainer = "thebrazenbeard"
+arch = ["armada38x"]
+os_min_ver = "7.2-72806"
+thirdparty = true
+precheckstartstop = true
+
+[service]
+enabled = true
+command = "bin/tattler"
+args = [
+  "--listen", "127.0.0.1:9147",
+  "--state-dir", "{pkgvar}/state",
+  "--poll", "1s",
+  "--metrics-interval", "5s"
+]
+pid_file = "tattler.pid"
+log_file = "tattler.log"
+state_dirs = ["state"]
+start_probe_seconds = 1
+stop_timeout_seconds = 10
+
+[privilege]
+run_as = "package"
+username = "Tattler"
+
+[assets]
+icon64 = "assets/PACKAGE_ICON.PNG"
+icon256 = "assets/PACKAGE_ICON_256.PNG"
+
+[[payload.files]]
+source = "dist/tattler-linux-armv7"
+destination = "bin/tattler"
+mode = "0755"
+expected_elf_machine = 40

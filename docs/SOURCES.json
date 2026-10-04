@@ -1,0 +1,38 @@
+{
+  "research_date": "2026-10-04",
+  "normative_baseline": {
+    "name": "Synology DSM 7.2.2 Developer Guide",
+    "urls": [
+      "https://help.synology.com/developer-guide/",
+      "https://help.synology.com/developer-guide/synology_package/introduction.html",
+      "https://help.synology.com/developer-guide/synology_package/INFO.html",
+      "https://help.synology.com/developer-guide/synology_package/INFO_necessary_fields.html",
+      "https://help.synology.com/developer-guide/synology_package/INFO_optional_fields.html",
+      "https://help.synology.com/developer-guide/synology_package/scripts.html",
+      "https://help.synology.com/developer-guide/synology_package/conf.html",
+      "https://help.synology.com/developer-guide/privilege/privilege_config.html",
+      "https://help.synology.com/developer-guide/synology_package/script_env_var.html",
+      "https://help.synology.com/developer-guide/toolkit/pack_stage.html",
+      "https://help.synology.com/developer-guide/appendix/platarchs.html"
+    ]
+  },
+  "empirical_donor": {
+    "repository": "thebrazenbeard/tattler",
+    "branch": "build/tattler-v1-sol-20261004",
+    "head": "c11ac394828a76b971a32e178632f81e8a08b237",
+    "observed_runtime": "Tattler v0001 installed on DS216 / DSM 7.2.2 but failed to start; source inspection found lifecycle-contract defects. Corrected runtime qualification remained separate at extraction time."
+  },
+  "reference_implementations": [
+    {
+      "repository": "SynoCommunity/spksrc",
+      "head": "00052786a00a4c3cc6b1eaaf7bf7495031bba1bb",
+      "use": "service lifecycle patterns, DSM 7 migration guidance, architecture family mapping"
+    },
+    {
+      "repository": "SynologyOpenSource/ExamplePackages",
+      "head": "d2849c6fcf14ce72007d14e99a362c3d4f23be0a",
+      "use": "official example package layout and lifecycle reference"
+    }
+  ],
+  "evidence_ceiling": "Documentation and source references establish encoded package rules; they do not establish runtime success on an untested NAS/DSM subject."
+}

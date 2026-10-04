@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 
 from .model import Manifest
+
+_INFO_KEY = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 _RESERVED = {
@@ -12,6 +15,8 @@ _RESERVED = {
 
 
 def _quote(value: str) -> str:
+    if "\n" in value or "\r" in value or "\x00" in value:
+        raise ValueError("INFO values may not contain newlines, carriage returns, or NUL")
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
@@ -39,6 +44,8 @@ def render_info(manifest: Manifest) -> bytes:
     for key in manifest.info_extra:
         if key in _RESERVED:
             raise ValueError(f"info.extra may not override reserved INFO field {key!r}")
+        if not _INFO_KEY.fullmatch(key):
+            raise ValueError(f"invalid INFO field name {key!r}")
     fields.extend((key, manifest.info_extra[key]) for key in sorted(manifest.info_extra))
 
     return "".join(f"{key}={_quote(value)}\n" for key, value in fields).encode("utf-8")

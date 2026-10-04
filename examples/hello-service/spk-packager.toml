@@ -1,0 +1,37 @@
+[compatibility]
+profile = "dsm-7.2.2+"
+strict = true
+
+[package]
+id = "HelloSPK"
+display_name = "Hello SPK"
+version = "0.1.0-0001"
+description = "Example service packaged with SPK Packager."
+maintainer = "thebrazenbeard"
+arch = ["noarch"]
+os_min_ver = "7.2-72806"
+thirdparty = true
+precheckstartstop = true
+
+[service]
+enabled = true
+command = "bin/example-service"
+args = []
+pid_file = "example-service.pid"
+log_file = "example-service.log"
+state_dirs = ["state"]
+start_probe_seconds = 1
+stop_timeout_seconds = 10
+
+[privilege]
+run_as = "package"
+username = "HelloSPK"
+
+[assets]
+icon64 = "assets/PACKAGE_ICON.PNG"
+icon256 = "assets/PACKAGE_ICON_256.PNG"
+
+[[payload.files]]
+source = "payload/bin/example-service"
+destination = "bin/example-service"
+mode = "0755"

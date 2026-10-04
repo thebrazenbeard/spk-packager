@@ -195,6 +195,8 @@ def load_manifest(path: str | Path) -> Manifest:
     args = svc.get("args", [])
     if not isinstance(args, list) or not all(isinstance(x, str) for x in args):
         raise ValueError("service.args must be an array of strings")
+    if any("\x00" in x or "\n" in x or "\r" in x for x in args):
+        raise ValueError("service.args may not contain NUL, newline, or carriage return")
     state_dirs = svc.get("state_dirs", [])
     if not isinstance(state_dirs, list) or not all(isinstance(x, str) for x in state_dirs):
         raise ValueError("service.state_dirs must be an array of strings")
