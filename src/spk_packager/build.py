@@ -26,6 +26,19 @@ def _privilege_bytes(manifest: Manifest) -> bytes:
         payload["username"] = manifest.privilege.username
     if manifest.privilege.groupname:
         payload["groupname"] = manifest.privilege.groupname
+    if manifest.privilege.tools:
+        tools: list[dict[str, str]] = []
+        for item in manifest.privilege.tools:
+            tool = {
+                "relpath": item.relpath.as_posix(),
+                "user": item.user,
+                "group": item.group,
+                "permission": item.permission,
+            }
+            if item.capabilities is not None:
+                tool["capabilities"] = item.capabilities
+            tools.append(tool)
+        payload["tool"] = tools
     return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
@@ -56,6 +69,9 @@ def build_spk(manifest: Manifest, output: Path) -> BuildResult:
         for entry in manifest.payload_files
     ]
     package_tgz = deterministic_tgz(payload)
+    package_checksum = hashlib.md5(package_tgz, usedforsecurity=False).hexdigest()
+    payload_bytes = sum(len(item.data) for item in payload)
+    extractsize_kb = (payload_bytes + 1023) // 1024
 
     start_stop = (
         manifest.scripts.start_stop_status.read_bytes()
@@ -63,7 +79,15 @@ def build_spk(manifest: Manifest, output: Path) -> BuildResult:
         else render_start_stop_status(manifest)
     )
     outer: list[ArchiveFile] = [
-        ArchiveFile("INFO", render_info(manifest), 0o644),
+        ArchiveFile(
+            "INFO",
+            render_info(
+                manifest,
+                checksum=package_checksum,
+                extractsize_kb=extractsize_kb,
+            ),
+            0o644,
+        ),
         ArchiveFile("conf/privilege", _privilege_bytes(manifest), 0o644),
         ArchiveFile("package.tgz", package_tgz, 0o644),
         ArchiveFile("scripts/start-stop-status", start_stop, 0o755),
@@ -106,7 +130,7 @@ def build_spk(manifest: Manifest, output: Path) -> BuildResult:
     if manifest.assets.wizard_dir is not None:
         outer.extend(_wizard_members(manifest.assets.wizard_dir))
 
-    archive_bytes = deterministic_tar(outer)
+    archive_bytes = deterministic_tar(outer, first_member="INFO")
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(archive_bytes)

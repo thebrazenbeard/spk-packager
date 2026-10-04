@@ -13,8 +13,11 @@ It was extracted from the Tattler DS216 packaging work while investigating a rea
 - catches `precheckstartstop` / `prestart` / `prestop` mismatches;
 - uses DSM status code `3` for a cleanly stopped service;
 - checks archive traversal, duplicates, ordering, uid/gid/mtime normalization, icon dimensions, and payload layout;
+- emits documented `checksum=MD5(package.tgz)` and `extractsize` INFO fields and verifies the checksum on readback;
+- writes plain deterministic USTAR archives with `INFO` first and rejects `./`-prefixed/PAX metadata;
 - performs ELF machine-class sanity checks against known Synology architecture/platform families;
-- rejects `arch=noarch` when a native ELF payload is present;
+- rejects `arch=noarch` with native ELF payloads by default, while allowing an explicit multi-architecture bundle behind a portable dispatcher;
+- supports DSM `conf/privilege.tool` file permissions/capabilities without elevating the whole package;
 - explains the compatibility profile and the sources from which its rules were derived.
 
 It intentionally does **not** replace Synology's compiler toolchains. Compile your Go/Rust/C/C++/other native application with the appropriate target toolchain, then let SPK Packager build and verify the DSM package around the resulting payload.
@@ -70,6 +73,13 @@ state_dirs = ["state"]
 run_as = "package"
 username = "MyPackage"
 
+[[privilege.tool]]
+relpath = "bin/my-service"
+user = "package"
+group = "package"
+permission = "0755"
+capabilities = "cap_net_raw"
+
 [assets]
 icon64 = "assets/PACKAGE_ICON.PNG"
 icon256 = "assets/PACKAGE_ICON_256.PNG"
@@ -102,9 +112,10 @@ The first implementation generalizes mechanisms from:
 - `thebrazenbeard/tattler@c11ac394828a76b971a32e178632f81e8a08b237` (lifecycle fix plus required Package Center icons);
 - Synology's DSM 7.2.2 Developer Guide;
 - `SynologyOpenSource/ExamplePackages@d2849c6fcf14ce72007d14e99a362c3d4f23be0a`;
-- `SynoCommunity/spksrc@00052786a00a4c3cc6b1eaaf7bf7495031bba1bb`.
+- `SynoCommunity/spksrc@00052786a00a4c3cc6b1eaaf7bf7495031bba1bb`;
+- a broad public-GitHub packaging sweep covering recent DSM packers and real-hardware notes, recorded in `docs/PUBLIC_REPO_SURVEY_20261004.md`.
 
-No Synology or SynoCommunity implementation is vendored. The package builder is a clean Python standard-library implementation informed by the documented contract and the Tattler regression.
+No external implementation is vendored. The package builder is a clean Python standard-library implementation informed by the documented contract, the Tattler regression, and independently corroborated packaging mechanisms.
 
 See [docs/TATTLER_EXTRACTION.md](docs/TATTLER_EXTRACTION.md) and [docs/SOURCES.json](docs/SOURCES.json).
 

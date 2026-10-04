@@ -11,6 +11,7 @@ _INFO_KEY = re.compile(r"^[A-Za-z0-9_]+$")
 _RESERVED = {
     "package", "version", "displayname", "os_min_ver", "os_max_ver", "description",
     "maintainer", "arch", "thirdparty", "precheckstartstop", "ctl_stop",
+    "checksum", "extractsize",
 }
 
 
@@ -20,7 +21,12 @@ def _quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def render_info(manifest: Manifest) -> bytes:
+def render_info(
+    manifest: Manifest,
+    *,
+    checksum: str | None = None,
+    extractsize_kb: int | None = None,
+) -> bytes:
     pkg = manifest.package
     fields: list[tuple[str, str]] = [
         ("package", pkg.package_id),
@@ -40,6 +46,14 @@ def render_info(manifest: Manifest) -> bytes:
         fields.append(("os_max_ver", pkg.os_max_ver))
     if pkg.ctl_stop is not None:
         fields.append(("ctl_stop", "yes" if pkg.ctl_stop else "no"))
+    if checksum is not None:
+        if not re.fullmatch(r"[0-9a-f]{32}", checksum):
+            raise ValueError("checksum must be a lowercase MD5 hex string")
+        fields.append(("checksum", checksum))
+    if extractsize_kb is not None:
+        if extractsize_kb < 0:
+            raise ValueError("extractsize_kb must be non-negative")
+        fields.append(("extractsize", str(extractsize_kb)))
 
     for key in manifest.info_extra:
         if key in _RESERVED:

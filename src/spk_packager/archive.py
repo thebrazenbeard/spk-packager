@@ -31,13 +31,22 @@ def _info(item: ArchiveFile) -> tarfile.TarInfo:
     return info
 
 
-def deterministic_tar(files: list[ArchiveFile] | tuple[ArchiveFile, ...]) -> bytes:
+def deterministic_tar(
+    files: list[ArchiveFile] | tuple[ArchiveFile, ...],
+    *,
+    first_member: str | None = None,
+) -> bytes:
     ordered = sorted(files, key=lambda item: _safe_name(item.name))
     names = [item.name for item in ordered]
     if len(names) != len(set(names)):
         raise ValueError("duplicate archive member")
+    if first_member is not None:
+        match = [item for item in ordered if item.name == first_member]
+        if len(match) != 1:
+            raise ValueError(f"required first archive member {first_member!r} is missing")
+        ordered = match + [item for item in ordered if item.name != first_member]
     output = io.BytesIO()
-    with tarfile.open(fileobj=output, mode="w:", format=tarfile.GNU_FORMAT) as tf:
+    with tarfile.open(fileobj=output, mode="w:", format=tarfile.USTAR_FORMAT) as tf:
         for item in ordered:
             tf.addfile(_info(item), io.BytesIO(item.data))
     return output.getvalue()
@@ -60,10 +69,14 @@ def safe_regular_members(tf: tarfile.TarFile) -> list[tarfile.TarInfo]:
         raise ValueError("archive contains duplicate members")
     for member in members:
         path = PurePosixPath(member.name)
+        if member.name.startswith("./"):
+            raise ValueError(f"./-prefixed archive member: {member.name}")
         if path.is_absolute() or ".." in path.parts:
             raise ValueError(f"unsafe member path: {member.name}")
         if not member.isfile():
             raise ValueError(f"non-regular archive member: {member.name}")
+        if member.pax_headers:
+            raise ValueError(f"PAX metadata is not allowed: {member.name}")
         if member.uid != 0 or member.gid != 0 or member.mtime != 0:
             raise ValueError(f"non-deterministic metadata: {member.name}")
     return members

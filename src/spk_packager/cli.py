@@ -68,6 +68,7 @@ def command_verify(args: argparse.Namespace) -> int:
         Path(args.spk),
         profile_id=args.profile,
         strict=not args.compat_only,
+        allow_noarch_native_bundle=args.allow_noarch_native_bundle,
     )
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
@@ -87,6 +88,7 @@ def command_explain(args: argparse.Namespace) -> int:
     print(f"minimum_os: {profile.minimum_os}")
     print(f"require_privilege: {profile.require_privilege}")
     print(f"require_icons: {profile.require_icons}")
+    print(f"require_payload_checksum: {profile.require_payload_checksum}")
     print(f"wizard_uifiles_available: {profile.wizard_uifiles_available}")
     print(f"signing_deprecated: {profile.signing_deprecated}")
     print("notes:")
@@ -143,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("spk")
     verify.add_argument("--profile", default="dsm-7.2.2+")
     verify.add_argument("--compat-only", action="store_true")
+    verify.add_argument(
+        "--allow-noarch-native-bundle",
+        action="store_true",
+        help="allow ELF payloads under INFO arch=noarch for an explicitly multi-architecture bundle",
+    )
     verify.add_argument("--json", action="store_true")
     verify.set_defaults(func=command_verify)
 

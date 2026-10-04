@@ -35,3 +35,15 @@
 > **Challenge:** Static lifecycle lint can reject valid shell such as `prestart|prestop|start|stop)`, or accept text that merely contains an action name in a comment.
 >
 > **Resolution:** v0.1 recognizes grouped shell-case labels instead of literal `prestart)` substrings, and Linux CI executes the generated lifecycle through the actual POSIX harness. This is still bounded validation, not a general shell parser; custom scripts remain subject to live DSM qualification.
+
+> **Challenge:** Requiring `arch=noarch` to contain no native binaries rejects a legitimate packaging pattern used by packages that bundle several native architectures and dispatch at runtime.
+>
+> **Resolution:** Native ELF under `noarch` remains rejected by default. A project may explicitly opt into `allow_noarch_native_bundle=true`, but the service entrypoint must be a non-ELF portable dispatcher and structural verification still surfaces every native machine class. This records the exception without turning `noarch` into a silent architecture bypass.
+
+> **Challenge:** Adding `checksum`, `extractsize`, USTAR, and INFO-first rules because public repos do it risks cargo-culting implementation folklore.
+>
+> **Resolution:** `checksum` and `extractsize` are documented Synology INFO fields; public repositories provide corroborating and real-hardware failure evidence. USTAR/INFO-first/PAX rejection are packaging hardening derived from multiple independent working packers. They remain source/package checks, not claims of DSM runtime qualification.
+
+> **Challenge:** A privilege helper feature can quietly recreate root-equivalent packaging.
+>
+> **Resolution:** `[[privilege.tool]]` follows the documented DSM schema: the target must exist in the payload, user/group remain `package`, permissions are constrained, and Linux capabilities are explicit. Whole-package root remains rejected by the strict profile.

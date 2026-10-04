@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -36,6 +38,21 @@ class PackagerTests(unittest.TestCase):
             self.assertTrue(report.ok, report.as_dict())
             self.assertEqual(report.details["info"]["os_min_ver"], "7.2-72806")
             self.assertEqual(report.details["info"]["precheckstartstop"], "yes")
+            self.assertRegex(report.details["info"]["checksum"], r"^[0-9a-f]{32}$")
+            self.assertGreaterEqual(int(report.details["info"]["extractsize"]), 1)
+            self.assertEqual(
+                report.details["info"]["checksum"],
+                report.details["package_tgz_md5"],
+            )
+            with tarfile.open(first.output, "r:") as tf:
+                members = tf.getmembers()
+                self.assertEqual(members[0].name, "INFO")
+                self.assertTrue(all(not member.pax_headers for member in members))
+                package_bytes = tf.extractfile("package.tgz").read()
+            self.assertEqual(
+                hashlib.md5(package_bytes, usedforsecurity=False).hexdigest(),
+                report.details["info"]["checksum"],
+            )
 
     def test_generated_lifecycle_encodes_tattler_regression_fix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -63,6 +80,77 @@ class PackagerTests(unittest.TestCase):
             (root / "payload" / "bin" / "example-service").write_bytes(elf)
             issues = lint_manifest(load_manifest(manifest_path))
             self.assertTrue(any(i.code == "NOARCH_NATIVE_BINARY" for i in issues), issues)
+
+    def test_noarch_native_bundle_requires_explicit_portable_dispatcher(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "demo"
+            manifest_path = scaffold(root, "BundleDemo", "Bundle Demo", "tester")
+            manifest_text = manifest_path.read_text(encoding="utf-8").replace(
+                "precheckstartstop = true\n",
+                "precheckstartstop = true\nallow_noarch_native_bundle = true\n",
+            )
+            for name, machine in (("armv7", 40), ("x86_64", 62)):
+                data = bytearray(64)
+                data[:4] = b"\x7fELF"
+                data[4] = 1
+                data[5] = 1
+                data[18:20] = struct.pack("<H", machine)
+                path = root / "payload" / "bin" / name
+                path.write_bytes(data)
+                manifest_text += (
+                    "\n[[payload.files]]\n"
+                    f'source = "payload/bin/{name}"\n'
+                    f'destination = "bin/{name}"\n'
+                    'mode = "0755"\n'
+                )
+            manifest_path.write_text(manifest_text, encoding="utf-8")
+            manifest = load_manifest(manifest_path)
+            issues = lint_manifest(manifest)
+            self.assertFalse(has_errors(issues), issues)
+            self.assertTrue(
+                any(i.code == "NOARCH_NATIVE_BUNDLE_EXPLICIT" for i in issues),
+                issues,
+            )
+            result = build_spk(manifest, root / "dist" / "bundle.spk")
+            denied = verify_spk(result.output)
+            self.assertFalse(denied.ok)
+            allowed = verify_spk(
+                result.output,
+                allow_noarch_native_bundle=True,
+            )
+            self.assertTrue(allowed.ok, allowed.as_dict())
+
+    def test_privilege_tool_is_serialized_and_target_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "demo"
+            manifest_path = scaffold(root, "ToolDemo", "Tool Demo", "tester")
+            with manifest_path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    "\n[[privilege.tool]]\n"
+                    'relpath = "bin/example-service"\n'
+                    'user = "package"\n'
+                    'group = "package"\n'
+                    'permission = "0755"\n'
+                    'capabilities = "cap_net_raw"\n'
+                )
+            manifest = load_manifest(manifest_path)
+            issues = lint_manifest(manifest)
+            self.assertFalse(has_errors(issues), issues)
+            result = build_spk(manifest, root / "dist" / "tool.spk")
+            report = verify_spk(result.output)
+            self.assertTrue(report.ok, report.as_dict())
+            with tarfile.open(result.output, "r:") as tf:
+                privilege = json.loads(tf.extractfile("conf/privilege").read())
+            self.assertEqual(
+                privilege["tool"],
+                [{
+                    "capabilities": "cap_net_raw",
+                    "group": "package",
+                    "permission": "0755",
+                    "relpath": "bin/example-service",
+                    "user": "package",
+                }],
+            )
 
     def test_armada38x_machine_hint(self) -> None:
         machines, warnings = expected_elf_machines(("armada38x",))

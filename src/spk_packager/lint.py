@@ -107,6 +107,7 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
     destinations: set[str] = set()
     service_dest = manifest.service.command if manifest.service.enabled else None
     service_found = False
+    service_machine: int | None = None
     native_machines: list[tuple[str, int]] = []
     arch_machines, arch_warnings = expected_elf_machines(manifest.package.arch)
     for warning in arch_warnings:
@@ -134,6 +135,8 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
                 ))
         data = entry.source.read_bytes()
         machine = elf_machine(data)
+        if service_dest == dest:
+            service_machine = machine
         if machine is None:
             continue
         native_machines.append((dest, machine))
@@ -142,12 +145,12 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
                 "error", "ELF_MACHINE_OVERRIDE_MISMATCH",
                 f"{dest}: ELF e_machine={machine}, expected {entry.expected_elf_machine}",
             ))
-        if "noarch" in manifest.package.arch:
+        if "noarch" in manifest.package.arch and not manifest.package.allow_noarch_native_bundle:
             issues.append(Issue(
                 "error", "NOARCH_NATIVE_BINARY",
-                f"{dest} is a native ELF binary but package.arch includes noarch",
+                f"{dest} is a native ELF binary but package.arch includes noarch; set package.allow_noarch_native_bundle=true only when a portable dispatcher selects a compatible bundled binary",
             ))
-        elif arch_machines and machine not in arch_machines:
+        elif "noarch" not in manifest.package.arch and arch_machines and machine not in arch_machines:
             issues.append(Issue(
                 "error", "ELF_ARCH_MISMATCH",
                 f"{dest}: ELF e_machine={machine} does not match hints {sorted(arch_machines)} for arch={manifest.package.arch}",
@@ -158,6 +161,48 @@ def lint_manifest(manifest: Manifest) -> list[Issue]:
             "error", "SERVICE_PAYLOAD_MISSING",
             f"service.command {service_dest!r} is not one of the payload destinations",
         ))
+
+    if manifest.package.allow_noarch_native_bundle:
+        if manifest.package.arch != ("noarch",):
+            issues.append(Issue(
+                "error", "NOARCH_BUNDLE_ARCH_INVALID",
+                "package.allow_noarch_native_bundle=true requires package.arch=['noarch']",
+            ))
+        if manifest.service.enabled and service_machine is not None:
+            issues.append(Issue(
+                "error", "NOARCH_BUNDLE_NATIVE_DISPATCHER",
+                "a noarch native bundle requires service.command to be a non-ELF portable dispatcher",
+            ))
+        if not native_machines:
+            issues.append(Issue(
+                "warning", "NOARCH_BUNDLE_EMPTY",
+                "allow_noarch_native_bundle=true but no native ELF payloads were found",
+            ))
+        else:
+            issues.append(Issue(
+                "warning", "NOARCH_NATIVE_BUNDLE_EXPLICIT",
+                f"noarch package explicitly bundles native ELF payloads: {native_machines}",
+            ))
+
+    tool_paths: set[str] = set()
+    for item in manifest.privilege.tools:
+        relpath = item.relpath.as_posix()
+        if relpath in tool_paths:
+            issues.append(Issue(
+                "error", "PRIVILEGE_TOOL_DUPLICATE",
+                f"duplicate privilege.tool relpath: {relpath}",
+            ))
+        tool_paths.add(relpath)
+        if relpath not in destinations:
+            issues.append(Issue(
+                "error", "PRIVILEGE_TOOL_TARGET_MISSING",
+                f"privilege.tool target is not in payload: {relpath}",
+            ))
+        if item.capabilities is not None and min_os < DSMVersion.parse("7.0-40656"):
+            issues.append(Issue(
+                "error", "PRIVILEGE_TOOL_CAPABILITY_DSM_TOO_OLD",
+                "privilege.tool capabilities require DSM 7.0-40656 or newer",
+            ))
 
     if native_machines and len({machine for _, machine in native_machines}) > 1:
         issues.append(Issue(

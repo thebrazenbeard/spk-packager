@@ -42,6 +42,7 @@ class PackageConfig:
     thirdparty: bool = True
     precheckstartstop: bool = True
     ctl_stop: bool | None = None
+    allow_noarch_native_bundle: bool = False
 
 
 @dataclass(frozen=True)
@@ -57,10 +58,20 @@ class ServiceConfig:
 
 
 @dataclass(frozen=True)
+class PrivilegeTool:
+    relpath: PurePosixPath
+    user: str = "package"
+    group: str = "package"
+    permission: str = "0700"
+    capabilities: str | None = None
+
+
+@dataclass(frozen=True)
 class PrivilegeConfig:
     run_as: str = "package"
     username: str | None = None
     groupname: str | None = None
+    tools: tuple[PrivilegeTool, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -178,6 +189,7 @@ def load_manifest(path: str | Path) -> Manifest:
         thirdparty=bool(pkg.get("thirdparty", True)),
         precheckstartstop=bool(pkg.get("precheckstartstop", True)),
         ctl_stop=(bool(pkg["ctl_stop"]) if "ctl_stop" in pkg else None),
+        allow_noarch_native_bundle=bool(pkg.get("allow_noarch_native_bundle", False)),
     )
     if not package.description:
         raise ValueError("package.description is required")
@@ -221,10 +233,50 @@ def load_manifest(path: str | Path) -> Manifest:
         raise ValueError("service timing values are out of range")
 
     priv = _section(raw, "privilege")
+    raw_tools = priv.get("tool", [])
+    if not isinstance(raw_tools, list):
+        raise ValueError("[[privilege.tool]] must be an array of tables")
+    privilege_tools: list[PrivilegeTool] = []
+    capability_re = re.compile(r"^cap_[a-z0-9_]+(?:,cap_[a-z0-9_]+)*$")
+    permission_re = re.compile(r"^[0-7]{4}$")
+    for index, item in enumerate(raw_tools):
+        if not isinstance(item, dict):
+            raise ValueError(f"privilege.tool[{index}] must be a table")
+        relpath = _relative_posix(
+            str(item.get("relpath", "")),
+            f"privilege.tool[{index}].relpath",
+        )
+        user = str(item.get("user", "package"))
+        group = str(item.get("group", "package"))
+        permission = str(item.get("permission", "0700"))
+        capabilities = (
+            str(item["capabilities"]) if "capabilities" in item else None
+        )
+        if user != "package" or group != "package":
+            raise ValueError("privilege.tool user and group must both be 'package'")
+        if not permission_re.fullmatch(permission):
+            raise ValueError(
+                f"privilege.tool[{index}].permission must be four octal digits"
+            )
+        if capabilities is not None and not capability_re.fullmatch(capabilities):
+            raise ValueError(
+                f"privilege.tool[{index}].capabilities must be comma-separated cap_* names"
+            )
+        privilege_tools.append(
+            PrivilegeTool(
+                relpath=relpath,
+                user=user,
+                group=group,
+                permission=permission,
+                capabilities=capabilities,
+            )
+        )
+
     privilege = PrivilegeConfig(
         run_as=str(priv.get("run_as", "package")),
         username=str(priv["username"]) if "username" in priv else None,
         groupname=str(priv["groupname"]) if "groupname" in priv else None,
+        tools=tuple(privilege_tools),
     )
     if privilege.run_as not in {"package", "root"}:
         raise ValueError("privilege.run_as must be 'package' or 'root'")

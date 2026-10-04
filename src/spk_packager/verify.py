@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from pathlib import Path, PurePosixPath
+import re
 import tarfile
 
 from .arch import expected_elf_machines
@@ -44,16 +45,26 @@ def _safe_members(tf: tarfile.TarFile, report: VerificationReport, layer: str) -
         report.errors.append(f"{layer}: archive members are not lexicographically sorted")
     for member in members:
         path = PurePosixPath(member.name)
+        if member.name.startswith("./"):
+            report.errors.append(f"{layer}: ./-prefixed path {member.name!r}")
         if path.is_absolute() or ".." in path.parts:
             report.errors.append(f"{layer}: unsafe path {member.name!r}")
         if not member.isfile():
             report.errors.append(f"{layer}: non-file member {member.name!r}")
+        if member.pax_headers:
+            report.errors.append(f"{layer}: PAX metadata on {member.name!r}")
         if member.uid != 0 or member.gid != 0 or member.mtime != 0:
             report.errors.append(f"{layer}: non-deterministic metadata on {member.name!r}")
     return members
 
 
-def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = True) -> VerificationReport:
+def verify_spk(
+    path: Path,
+    *,
+    profile_id: str = "dsm-7.2.2+",
+    strict: bool = True,
+    allow_noarch_native_bundle: bool = False,
+) -> VerificationReport:
     report = VerificationReport()
     path = path.resolve()
     profile = get_profile(profile_id)
@@ -73,10 +84,15 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
         return report
     info: dict[str, str] = {}
     package_bytes: bytes | None = None
+    privilege_tool_paths: set[str] = set()
     with outer_tf:
         outer_members = _safe_members(outer_tf, report, "outer")
         outer_names = {m.name for m in outer_members}
         report.details["outer_members"] = len(outer_members)
+        if outer_members and outer_members[0].name != "INFO":
+            report.errors.append(
+                f"outer: INFO must be the first archive member, found {outer_members[0].name!r}"
+            )
         required = {
             "INFO", "package.tgz", "conf/privilege", "scripts/start-stop-status",
             "scripts/preinst", "scripts/postinst", "scripts/preuninst", "scripts/postuninst",
@@ -118,6 +134,31 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
                         report.errors.append(message)
                     else:
                         report.warnings.append(message)
+                tools = parsed.get("tool", [])
+                if not isinstance(tools, list):
+                    raise ValueError("tool must be an array")
+                seen_tool_paths: set[str] = set()
+                for index, tool in enumerate(tools):
+                    if not isinstance(tool, dict):
+                        raise ValueError(f"tool[{index}] must be an object")
+                    relpath = str(tool.get("relpath", ""))
+                    rel = PurePosixPath(relpath)
+                    if not relpath or rel.is_absolute() or ".." in rel.parts:
+                        raise ValueError(f"tool[{index}].relpath is unsafe")
+                    if relpath in seen_tool_paths:
+                        raise ValueError(f"duplicate tool relpath {relpath!r}")
+                    seen_tool_paths.add(relpath)
+                    privilege_tool_paths.add(relpath)
+                    if tool.get("user") != "package" or tool.get("group") != "package":
+                        raise ValueError(f"tool[{index}] user/group must both be package")
+                    if not re.fullmatch(r"[0-7]{4}", str(tool.get("permission", ""))):
+                        raise ValueError(f"tool[{index}].permission must be four octal digits")
+                    capabilities = tool.get("capabilities")
+                    if capabilities is not None and not re.fullmatch(
+                        r"cap_[a-z0-9_]+(?:,cap_[a-z0-9_]+)*",
+                        str(capabilities),
+                    ):
+                        raise ValueError(f"tool[{index}].capabilities is invalid")
             except Exception as exc:
                 report.errors.append(f"conf/privilege is invalid: {exc}")
 
@@ -131,8 +172,8 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
                 report.errors.append(f"conf/resource is invalid: {exc}")
 
         license_bytes = read_outer("LICENSE")
-        if license_bytes is not None and len(license_bytes) >= 1024 * 1024:
-            report.errors.append("LICENSE must be smaller than 1 MiB")
+        if license_bytes is not None and len(license_bytes) >= 1_000_000:
+            report.errors.append("LICENSE must be smaller than 1 MB")
 
         if any(name.startswith("WIZARD_UIFILES/") for name in outer_names) and not profile.wizard_uifiles_available:
             report.errors.append(f"WIZARD_UIFILES is not available in profile {profile_id}")
@@ -177,7 +218,36 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
                         report.errors.append("INFO os_max_ver is lower than os_min_ver")
             except Exception as exc:
                 report.errors.append(f"INFO OS version range invalid: {exc}")
+            if info.get("extractsize"):
+                try:
+                    extractsize = int(info["extractsize"])
+                    if extractsize < 0:
+                        raise ValueError("must be non-negative")
+                    report.details["extractsize_kb"] = extractsize
+                except Exception as exc:
+                    report.errors.append(f"INFO extractsize invalid: {exc}")
+
         package_bytes = read_outer("package.tgz")
+        if package_bytes is not None:
+            actual_md5 = hashlib.md5(
+                package_bytes,
+                usedforsecurity=False,
+            ).hexdigest()
+            report.details["package_tgz_md5"] = actual_md5
+            declared_md5 = info.get("checksum")
+            if declared_md5:
+                if not re.fullmatch(r"[0-9a-fA-F]{32}", declared_md5):
+                    report.errors.append("INFO checksum is not a 32-character MD5 hex string")
+                elif declared_md5.lower() != actual_md5:
+                    report.errors.append(
+                        f"INFO checksum mismatch: declared {declared_md5.lower()}, actual {actual_md5}"
+                    )
+            elif strict and profile.require_payload_checksum:
+                report.errors.append(
+                    "INFO checksum is required by the strict profile for later DSM manual-install compatibility"
+                )
+            else:
+                report.warnings.append("INFO checksum is absent")
 
     if package_bytes is None:
         return report
@@ -190,6 +260,12 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
     with inner_tf:
         inner_members = _safe_members(inner_tf, report, "payload")
         report.details["payload_members"] = len(inner_members)
+        inner_names = {member.name for member in inner_members}
+        missing_tool_targets = sorted(privilege_tool_paths - inner_names)
+        if missing_tool_targets:
+            report.errors.append(
+                f"conf/privilege tool targets missing from payload: {missing_tool_targets}"
+            )
         arch_values = tuple(x for x in info.get("arch", "").split() if x)
         allowed_machines, warnings = expected_elf_machines(arch_values)
         report.warnings.extend(warnings)
@@ -204,7 +280,13 @@ def verify_spk(path: Path, *, profile_id: str = "dsm-7.2.2+", strict: bool = Tru
                 continue
             seen_elf.append({"path": member.name, "e_machine": machine})
             if "noarch" in arch_values:
-                report.errors.append(f"payload {member.name} is ELF e_machine={machine} but INFO arch includes noarch")
+                message = (
+                    f"payload {member.name} is ELF e_machine={machine} while INFO arch includes noarch"
+                )
+                if allow_noarch_native_bundle:
+                    report.warnings.append(message + " (explicit multi-arch bundle allowance)")
+                else:
+                    report.errors.append(message)
             elif allowed_machines and machine not in allowed_machines:
                 report.errors.append(f"payload {member.name} ELF e_machine={machine} does not match INFO arch machine hints {sorted(allowed_machines)}")
         report.details["elf_payloads"] = seen_elf

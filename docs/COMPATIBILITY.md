@@ -24,6 +24,12 @@ Synology platform strings are mapped where the DSM 7.2.2 guide or the pinned Syn
 
 This is not enough to prove libc version, kernel ABI, instruction-set extensions, dynamic loader, or external library compatibility.
 
+A `noarch` package normally may not contain native ELF payloads. The explicit `allow_noarch_native_bundle=true` mode exists for the documented-in-the-wild pattern where a portable dispatcher selects among several bundled native binaries. That mode is an exception with visible warnings, not a weakening of the default architecture check.
+
+## Archive and INFO compatibility hardening
+
+The strict profile emits and verifies Synology's documented `checksum=MD5(package.tgz)` field, emits `extractsize`, writes deterministic USTAR archives with `INFO` first, and rejects PAX/`./` archive artifacts. These rules are compatible with the 7.2.2 baseline and are additionally corroborated by current public packagers and later DSM real-hardware reports.
+
 ## Toolchain boundary
 
 SPK Packager packages binaries; it does not promise to compile them correctly for every Synology platform. For native code, use the correct Synology toolkit/toolchain or another cross-compiler whose output has been qualified for the target.

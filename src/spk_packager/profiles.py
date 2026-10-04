@@ -11,6 +11,7 @@ class CompatibilityProfile:
     minimum_os: DSMVersion
     require_privilege: bool
     require_icons: bool
+    require_payload_checksum: bool
     wizard_uifiles_available: bool
     signing_deprecated: bool
     notes: tuple[str, ...]
@@ -22,12 +23,14 @@ DSM_7_2_2_PLUS = CompatibilityProfile(
     minimum_os=DSMVersion.parse("7.2-72806"),
     require_privilege=True,
     require_icons=True,
+    require_payload_checksum=True,
     wizard_uifiles_available=True,
     signing_deprecated=True,
     notes=(
         "DSM 7 packages must explicitly lower privilege through conf/privilege.",
         "precheckstartstop=yes requires prestart and prestop lifecycle handling.",
         "WIZARD_UIFILES is available from DSM 7.2.2.",
+        "INFO checksum is a documented MD5 of package.tgz and is emitted defensively for later DSM manual-install compatibility.",
         "SPK signing is deprecated after DSM 7.0.",
         "Future DSM releases are not automatically behavior-qualified; this profile is a known 7.2.2 baseline with no os_max_ver ceiling.",
     ),

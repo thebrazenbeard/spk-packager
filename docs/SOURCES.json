@@ -32,7 +32,33 @@
       "repository": "SynologyOpenSource/ExamplePackages",
       "head": "d2849c6fcf14ce72007d14e99a362c3d4f23be0a",
       "use": "official example package layout and lifecycle reference"
+    },
+    {
+      "repository": "EIGHTfs/DeepSeekHarness-NAS",
+      "head": "d6369f4ed1a4a069e5875a1dc7644b6278ea664e",
+      "use": "2026 mirror of Synology INFO/package/privilege documentation, including checksum, extractsize, icons, and privilege.tool capabilities"
+    },
+    {
+      "repository": "PeterSuh-Q3/SynoSmartInfo",
+      "head": "cc83dd7529655aec35aa0f9e76b3a8c4de57f7f8",
+      "use": "DSM 7.4.1 real-hardware packaging notes; package.tgz checksum, extractsize, privilege behavior, and live-install evidence boundaries"
+    },
+    {
+      "repository": "marvingerstner/synology-github-backup",
+      "head": "fe61ad564bd3ee9ed722ec6cc380995ab7c4bd7b",
+      "use": "USTAR, INFO-first, PAX/macOS metadata defenses, root metadata normalization, multi-architecture package construction"
+    },
+    {
+      "repository": "n0-computer/iroh-share",
+      "head": "4be9a5f67294d24cffe01b696af96190c724922a",
+      "use": "noarch package containing architecture-specific native payloads behind runtime dispatch"
+    },
+    {
+      "repository": "nzbfast/nzbfast",
+      "head": "370da775361e29a9fb0d490f4750df899ea56c92",
+      "use": "noarch multi-architecture bundle, release artifact checksum gating, USTAR packaging and metadata normalization"
     }
   ],
+  "research_notes": "See docs/PUBLIC_REPO_SURVEY_20261004.md for admitted, deferred, and rejected mechanisms from the public-repository sweep.",
   "evidence_ceiling": "Documentation and source references establish encoded package rules; they do not establish runtime success on an untested NAS/DSM subject."
 }
