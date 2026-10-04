@@ -38,8 +38,10 @@ The donor source rebuilt deterministically for `linux/arm/v7` with binary SHA-25
 
 Using the Tattler-shaped manifest, the donor's 64x64 and 256x256 icons, and that exact
 binary, SPK Packager linted, built, rebuilt, and verified the package successfully.
-Both package builds were byte-identical at SHA-256
-`3814DFE40BD325313F7DB18EA907E04F590FDC70D5C9C943378F3E0F86E2B5E2`.
+After the POSIX lifecycle/PID-identity fix was qualified at packager source
+`45e73af5d3501db5c56fb03d133609f87386db1e`, both package builds were
+byte-identical at SHA-256
+`94D404BA202B0AC21FB957AB615D0E048B93B64F6F6ED8866B65852FCECCA100`.
 Verification observed `INFO arch=armada38x` and payload ELF `e_machine=40`.
 
 This establishes `SOURCE_VALIDATED`, `SPK_STRUCTURALLY_VERIFIED`, and
