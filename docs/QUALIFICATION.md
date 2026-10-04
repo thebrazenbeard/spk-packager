@@ -72,3 +72,37 @@ This qualifies the new checksum/extractsize, USTAR/INFO-first, explicit noarch n
 bundle, and documented `privilege.tool` source/package mechanisms. It still does not
 establish Package Center installation or runtime behavior on a NAS for the newly
 generated artifact.
+
+## 2026-10-04 final hostile-hardening qualification
+
+Implementation subject: `2f032d2f23fcbed1e7d3eae62da212a84d2a6528`.
+
+Project Runner read back that exact GitHub branch head successfully. GitHub Actions
+CI run #18 passed on Python 3.11, 3.12, 3.13, and 3.14. Every Linux matrix job ran
+the complete 25-test suite, including the POSIX lifecycle harness and the
+manifest-path command-substitution sentinel, then passed deterministic self-test,
+generated-package verification, and generated-shell syntax validation.
+
+The Windows-local suite passed all 23 platform-applicable tests; the two POSIX-only
+lifecycle tests were skipped locally and executed successfully in GitHub's Linux
+matrix. Deterministic self-test SHA-256 was
+`4152D8926084B1E4F44829827CDB66BFC902C940DD931C9E443378744582C989`.
+
+The current Tattler donor binary remained exactly
+`C9C3CE1B3B1CB8222B8E8B5570B075D882358C2B0A57DC7F22609A9EF24EEAB8`.
+The hardened packager produced the donor SPK twice byte-identically at SHA-256
+`ABE93B507839238F8542EF92A5E1755BC7D9445FB9E32F4CE77D7B82100BDB1A`.
+Strict verification read back `checksum=9e8377aa4d61fe1f1494e6a7ffb7c62a`,
+`extractsize=5196`, `arch=armada38x`, payload bytes `5308551`, and payload
+ELF `e_machine=40`.
+
+This exact subject additionally qualifies the source/package behavior for canonical
+archive paths, manifest input confinement with explicit external-source opt-in,
+strict TOML type handling, INFO escaping/semantics, conservative deterministic
+`extractsize`, gzip reproducibility metadata, expanded Synology architecture
+families, live-PID duplicate-start fail-closed behavior, and the documented
+`conf/privilege` `ctrl-script`, `executable`, and `tool` structures. Strict
+mode rejects package-wide and per-entry root escalation.
+
+It still does not establish `DSM_INSTALLED`, `DSM_RUNTIME_VERIFIED`, or
+`APPLICATION_BEHAVIOR_VERIFIED` for the newly generated Tattler artifact.
