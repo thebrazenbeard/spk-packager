@@ -12,7 +12,7 @@ The exact SPK opens safely, contains required metadata and lifecycle members, ha
 
 ## SPK_REPRODUCIBLE
 
-Two independent builds from the same exact source inputs produce the same SHA-256.
+Independent builds from the same exact source inputs produce the same SHA-256. For the current v0.1 qualification bar, this includes a Windows/Linux cross-host comparison; two rebuilds on one host are useful evidence but do not by themselves establish host-independent reproducibility.
 
 ## DSM_INSTALLED
 
@@ -27,6 +27,8 @@ The installed package starts, stops, and restarts correctly and its service beha
 The packaged application itself performs its intended function under representative workload.
 
 No lower state implies a higher state.
+
+Historical sections below predate the Windows/Linux cross-host gate. Their byte-identical double-build evidence establishes same-host reproducibility for those exact subjects, not the stronger cross-host claim introduced afterward.
 
 ## 2026-10-04 real-donor qualification
 

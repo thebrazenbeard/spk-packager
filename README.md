@@ -8,13 +8,13 @@ It was extracted from the Tattler DS216 packaging work while investigating a rea
 
 - scaffolds a buildable DSM 7.2.2 package project;
 - generates deterministic `INFO`, `conf/privilege`, lifecycle scripts, icons, and `package.tgz`;
-- packs byte-reproducible `.spk` archives;
+- packs cross-host byte-reproducible `.spk` archives without delegating DEFLATE byte choice to the host zlib;
 - validates DSM 7 privilege and lifecycle requirements, including documented `ctrl-script`, `executable`, and `tool` privilege entries;
 - catches `precheckstartstop` / `prestart` / `prestop` mismatches and stale/mismatched PID identity before launching duplicates;
 - uses DSM status code `3` for a cleanly stopped service;
 - checks canonical/path-confined build inputs, archive traversal, duplicates, ordering, uid/gid/mtime normalization, icon dimensions, and payload layout;
 - emits documented `checksum=MD5(package.tgz)` and `extractsize` INFO fields and verifies the checksum on readback;
-- writes plain deterministic USTAR archives with `INFO` first and rejects `./`-prefixed/PAX metadata;
+- writes plain deterministic USTAR archives with `INFO` first, host-independent stored-block gzip for `package.tgz`, and rejects `./`-prefixed/PAX metadata;
 - performs ELF machine-class sanity checks against known Synology architecture/platform families;
 - rejects `arch=noarch` with native ELF payloads by default, while allowing an explicit multi-architecture bundle behind a portable dispatcher;
 - supports DSM `conf/privilege` defaults, per-lifecycle `ctrl-script`, per-file `executable`, and `tool` permissions/capabilities, while strict mode rejects root escalation;

@@ -34,3 +34,40 @@ jobs:
           python -m spk_packager.cli build "$tmp/demo/spk-packager.toml" --output "$tmp/demo.spk"
           python -m spk_packager.cli verify "$tmp/demo.spk"
           tar -xOf "$tmp/demo.spk" scripts/start-stop-status | sh -n
+
+
+  cross-host-repro:
+    name: cross-host-repro / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: python -m pip install .
+      - name: Build reproducibility receipt
+        run: python -c "import pathlib,platform,subprocess; out=subprocess.check_output(['python','-m','spk_packager.cli','selftest'],text=True).strip(); digest=out.split('sha256=',1)[1]; pathlib.Path('selftest-'+platform.system()+'.sha256').write_text(digest+'\n',encoding='utf-8',newline='\n')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: selftest-${{ runner.os }}
+          path: selftest-*.sha256
+
+  compare-cross-host-repro:
+    name: compare Windows/Linux reproducibility
+    needs: cross-host-repro
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: selftest-*
+          path: receipts
+          merge-multiple: true
+      - name: Compare self-test SPK digests
+        run: python -c "import pathlib; files=sorted(pathlib.Path('receipts').glob('selftest-*.sha256')); values={p.name:p.read_text(encoding='utf-8').strip() for p in files}; print(values); assert len(files)==2 and len(set(values.values()))==1, values"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import json
@@ -13,7 +14,7 @@ import tempfile
 import unittest
 
 from spk_packager.arch import expected_elf_machines
-from spk_packager.archive import ArchiveFile, deterministic_tar
+from spk_packager.archive import ArchiveFile, deterministic_tar, deterministic_tgz
 from spk_packager.build import build_spk
 from spk_packager.info import parse_info, render_properties
 from spk_packager.lifecycle import render_start_stop_status
@@ -133,6 +134,14 @@ def _compat_style_spk(source: Path, output: Path) -> None:
 
 
 class PackagerTests(unittest.TestCase):
+    def test_deterministic_tgz_uses_host_independent_stored_deflate(self) -> None:
+        files = [ArchiveFile("fixture.bin", b"A" * 8192)]
+        blob = deterministic_tgz(files)
+        self.assertEqual(blob[:3], b"\x1f\x8b\x08")
+        self.assertEqual(blob[9], 255)
+        self.assertEqual((blob[10] >> 1) & 0x03, 0)
+        self.assertEqual(gzip.decompress(blob), deterministic_tar(files))
+
     def test_scaffold_build_verify_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "demo"

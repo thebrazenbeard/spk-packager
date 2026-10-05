@@ -59,3 +59,8 @@
 > **Challenge:** A green builder test does not prove the standalone verifier catches malformed third-party SPKs.
 >
 > **Resolution:** Regression fixtures mutate INFO `extractsize`, lifecycle executable bits, gzip metadata, INFO escaping, archive path forms, and architecture metadata. Strict verification rejects those defects while `--compat-only` relaxes only reproducibility-oriented differences needed to inspect otherwise safe external packages.
+
+
+> **Challenge:** Fixing gzip `mtime=0` and tar metadata does not make gzip bytes host-independent if compression is delegated to the platform zlib.
+>
+> **Resolution:** OCD exposed this directly: identical tar/payload bytes built on Windows and Linux produced different `package.tgz` and SPK hashes. The packager now emits a standards-compliant gzip stream using repository-owned DEFLATE stored blocks, fixed header bytes, explicit CRC32, and explicit ISIZE. CI compares the self-test SPK SHA from Windows and Linux; same-host double builds alone no longer establish the strongest reproducibility claim.
